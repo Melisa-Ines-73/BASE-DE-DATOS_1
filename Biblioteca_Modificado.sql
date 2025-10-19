@@ -1,7 +1,6 @@
 -- ====== Base de datos ======
 CREATE DATABASE IF NOT EXISTS Biblioteca
-  DEFAULT CHARACTER SET utf8mb4
-  DEFAULT COLLATE utf8mb4_0900_ai_ci;
+  DEFAULT CHARACTER SET utf8mb4;
 USE Biblioteca;
 
 -- ====== Tabla: FichaBibliografica ======
@@ -29,7 +28,7 @@ CREATE TABLE IF NOT EXISTS Libro (
 
   -- CHECKs básicos
   CHECK (eliminado IN (0,1)),           -- dominio de valores para eliminado
-  CHECK (anioEdicion IS NULL OR (anioEdicion BETWEEN 1450 AND YEAR(CURDATE()))),  -- control sobre el año de edición
+  CHECK (anioEdicion IS NULL OR (anioEdicion BETWEEN 1450 AND 2025)),  -- control sobre el año de edición
 
   FOREIGN KEY (id_ficha) 
     REFERENCES FichaBibliografica(id_ficha)
