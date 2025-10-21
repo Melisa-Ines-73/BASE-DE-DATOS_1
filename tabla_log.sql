@@ -1,0 +1,11 @@
+USE Biblioteca;
+
+CREATE TABLE IF NOT EXISTS TxLog (
+  id        BIGINT PRIMARY KEY AUTO_INCREMENT,
+  ts        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  sesion    BIGINT NOT NULL,
+  codigo    INT NULL,
+  sql_state VARCHAR(5) NULL,
+  mensaje   VARCHAR(500) NULL,
+  detalle   VARCHAR(500) NULL
+) ENGINE=InnoDB;
