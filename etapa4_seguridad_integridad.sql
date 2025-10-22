@@ -7,17 +7,83 @@
 -- ============================================================
 -- CONFIGURACIÓN INICIAL
 -- ============================================================
-USE Biblioteca;
-
--- 1. Guardar configuración actual por si algo se modifica
-SET @OLD_FOREIGN_KEY_CHECKS = @@FOREIGN_KEY_CHECKS;
 
 /* 
 OBJETIVO: Preparar el entorno para las pruebas de seguridad
 */
 
+USE Biblioteca;
+SHOW TABLES;
+
+-- Guardar configuración actual por si algo se modifica
+SET @OLD_FOREIGN_KEY_CHECKS = @@FOREIGN_KEY_CHECKS;
+
 -- ============================================================
--- SECCIÓN 1: CREACIÓN DE USUARIOS CON ROLES ESPECÍFICOS
+-- SECCIÓN 1: VISTAS DE SEGURIDAD 
+-- ============================================================
+
+USE Biblioteca;
+
+-- VISTA 1: PARA BUSQUEDA RÁPIDA
+-- Propósito: Mostrar la información mas básica de un libro
+-- Seguridad: Solo lectura
+CREATE OR REPLACE VIEW vista_busqueda_rapida AS
+SELECT
+    l.titulo AS 'Titulo',
+    l.autor AS 'Autor',
+    f.isbn AS 'ISBN'
+FROM Libro l
+INNER JOIN FichaBibliografica f ON l.id_ficha = f.id_ficha
+WHERE l.eliminado = FALSE AND f.eliminado = FALSE;
+
+-- VISTA 2: PARA ESTUDIANTES (Información limitada)
+-- Propósito: Mostrar solo libros disponibles con datos básicos
+-- Seguridad: Oculta libros eliminados y IDs internos, información técnica
+CREATE OR REPLACE VIEW vista_estudiante AS
+SELECT 
+    l.titulo AS 'Titulo',
+    l.autor AS 'Autor',
+    l.editorial AS 'Editorial',
+    l.anioEdicion AS 'Año',
+    f.isbn AS 'ISBN',
+    f.clasificacionDewey AS 'Clasificacion',
+    f.estanteria AS 'Ubicacion',
+    i.nombre_idioma AS 'Idioma'
+FROM Libro l
+JOIN FichaBibliografica f ON l.id_ficha = f.id_ficha
+JOIN Idioma i ON f.id_idioma = i.id_idioma
+WHERE l.eliminado = FALSE 
+AND f.eliminado = FALSE;
+
+-- VISTA 3: PARA BIBLIOTECARIOS (Información extendida)
+-- Propósito: Mostrar información completa para gestión diaria
+-- Seguridad: Incluye estado de libros pero mantiene controles
+CREATE OR REPLACE VIEW vista_bibliotecario AS
+SELECT 
+    l.id_Libro AS 'Codigo',
+    l.titulo AS 'Titulo',
+    l.autor AS 'Autor',
+    l.editorial AS 'Editorial',
+    l.anioEdicion AS 'Año',
+    l.eliminado AS 'Eliminado',  -- Los bibliotecarios ven este campo
+    f.isbn AS 'ISBN',
+    f.clasificacionDewey AS 'Clasificacion',
+    f.estanteria AS 'Ubicacion',
+    f.eliminado AS 'Ficha_Eliminada'  -- Información interna visible
+FROM Libro l
+JOIN FichaBibliografica f ON l.id_ficha = f.id_ficha;
+
+-- ============================================================
+-- VERIFICAR VISTAS CREADAS
+-- ============================================================
+
+SHOW FULL TABLES IN Biblioteca WHERE TABLE_TYPE LIKE 'VIEW';
+SELECT * FROM vista_busqueda_rapida LIMIT 5;
+SELECT * FROM vista_estudiante LIMIT 5;
+SELECT * FROM vista_bibliotecario LIMIT 5;
+
+-- ============================================================
+-- SECCIÓN 2: CREACIÓN DE USUARIOS CON ROLES ESPECÍFICOS
 -- ESCENARIO: BIBLIOTECA UNIVERSITARIA "CAMPUS CENTRAL"
 -- ============================================================
 
@@ -50,7 +116,7 @@ CREATE USER IF NOT EXISTS 'admin_biblioteca'@'localhost'
 IDENTIFIED BY 'admin123';
 
 -- ============================================================
--- SECCIÓN 2: ASIGNACIÓN DE PERMISOS
+-- SECCIÓN 3: ASIGNACIÓN DE PERMISOS
 -- ============================================================
 
 /*
@@ -68,6 +134,7 @@ SHOW FULL TABLES IN Biblioteca WHERE TABLE_TYPE LIKE 'VIEW';
 -- Propósito: Solo puede consultar libros disponibles
 -- Seguridad: No puede modificar, eliminar ni ver datos internos
 GRANT SELECT ON Biblioteca.vista_estudiante TO 'estudiante_consulta'@'localhost';
+GRANT SELECT ON Biblioteca.vista_busqueda_rapida TO 'estudiante_consulta'@'localhost';
 
 -- PERMISOS DEL BIBLIOTECARIO  
 -- Propósito: Puede gestionar el día a día de la biblioteca
@@ -79,10 +146,10 @@ GRANT SELECT, INSERT, UPDATE ON Biblioteca.FichaBibliografica TO 'bibliotecario_
 -- PERMISOS DEL ADMINISTRADOR
 -- Propósito: Gestión completa de los datos de la biblioteca
 -- Seguridad: Todas las operaciones sobre datos, pero limitado a esta base
-GRANT SELECT, INSERT, UPDATE, DELETE ON Biblioteca.* TO 'admin_biblioteca'@'localhost';
+GRANT SELECT, INSERT, UPDATE, DELETE, EXECUTE ON Biblioteca.* TO 'admin_biblioteca'@'localhost';
 
 -- ============================================================
--- SECCIÓN 3: PROCEDIMIENTO ALMACENADO SEGURO (Anti-inyección SQL)
+-- SECCIÓN 4: PROCEDIMIENTO ALMACENADO SEGURO (Anti-inyección SQL)
 -- ============================================================
 
 -- PROCEDIMIENTO: Búsqueda segura de libros
@@ -146,19 +213,6 @@ GRANT EXECUTE ON PROCEDURE Biblioteca.buscar_libros_por_autor TO
 FLUSH PRIVILEGES;
 
 -- ============================================================
--- SECCIÓN 4: VERIFICACIÓN FINAL (Comandos útiles)
--- VALIDACIÓN DE RESTRICCIONES DE INTEGRIDAD
--- ============================================================
-
--- VERIFICAR USUARIOS CREADOS
-SELECT user, host FROM mysql.user WHERE user LIKE '%estudiante%' OR user LIKE '%bibliotecario%' OR user LIKE '%admin%';
-
--- VERIFICAR PERMISOS ASIGNADOS
-SHOW GRANTS FOR 'estudiante_consulta'@'localhost';
-SHOW GRANTS FOR 'bibliotecario_gestor'@'localhost';
-SHOW GRANTS FOR 'admin_biblioteca'@'localhost';
-
--- ============================================================
 -- SECCIÓN 5: PRUEBAS DE INTEGRIDAD
 -- ============================================================
 
@@ -166,9 +220,6 @@ SHOW GRANTS FOR 'admin_biblioteca'@'localhost';
 OBJETIVO: Verificar que las restricciones de la base de datos
 se cumplen correctamente
 */
-
--- Verificar la variable FOREIGN_KEY_CHECKS
-SELECT @@FOREIGN_KEY_CHECKS;
 
 -- Si es 0, las restricciones están desactivadas
 -- SET FOREIGN_KEY_CHECKS = 1;  -- Descomentar para activar restricciones
@@ -207,6 +258,8 @@ CALL buscar_libros_por_autor("'; DROP TABLE Libro; --");
 -- Resultado esperado: NO ejecuta el DROP, solo busca títulos que contengan ese texto
 -- Explicación: El parámetro se trata como literal, no como código SQL ejecutable
 
+SHOW TABLES LIKE 'Libro';
+
 -- Prueba con ataque básico de inyección
 CALL buscar_libros_por_titulo(''' OR ''1''=''1');
 
@@ -222,19 +275,44 @@ CALL buscar_libros_por_titulo('Libro 10');
 
 -- CONECTAR como 'estudiante_consulta'
 USE Biblioteca;
-SELECT * FROM vista_estudiante;
+SELECT CURRENT_USER() AS 'Usuario Actual';
+SELECT * FROM vista_estudiante LIMIT 5;
+
 -- Prueba Estudiante intenta modificar libro (DEBE FALLAR)
 UPDATE vista_estudiante SET Titulo = 'Hackeado' WHERE Codigo = 1;
 -- RESULTADO ESPERADO: Error de permisos
 
--- CONECTAR como 'bibliotecario_gestor'
+-- CONECTAR como 'bibliotecario_gestor' 
 USE Biblioteca;
-SELECT * FROM vista_bibliotecario;
+SELECT CURRENT_USER() AS 'Usuario Actual';
+SELECT * FROM vista_bibliotecario LIMIT 5;
+
 -- Prueba Bibliotecario puede actualizar estado (DEBE FUNCIONAR)  
 UPDATE Libro SET eliminado = TRUE WHERE id_Libro = @id_existente;
 -- RESULTADO ESPERADO: Éxito
 
--- Restaurar configuración
+-- ============================================================
+-- SECCIÓN 8: VERIFICACIÓN FINAL (Comandos útiles)
+-- ============================================================
+
+-- VERIFICAR VISTAS
+SHOW FULL TABLES IN Biblioteca WHERE TABLE_TYPE LIKE 'VIEW';
+
+-- VERIFICAR USUARIOS CREADOS
+SELECT user, host FROM mysql.user WHERE user LIKE '%estudiante%' OR user LIKE '%bibliotecario%' OR user LIKE '%admin%';
+
+-- VERIFICAR PERMISOS ASIGNADOS
+SHOW GRANTS FOR 'estudiante_consulta'@'localhost';
+SHOW GRANTS FOR 'bibliotecario_gestor'@'localhost';
+SHOW GRANTS FOR 'admin_biblioteca'@'localhost';
+
+-- VERIFICAR PROCEDIMIENTOS ALMACENADOS
+SHOW PROCEDURE STATUS WHERE Db = 'Biblioteca';
+
+-- VERIFICAR LA VARIABLE FOREIGN_KEY_CHECKS
+SELECT @@FOREIGN_KEY_CHECKS;
+
+-- Restaurar configuración (Por precaución)
 SET FOREIGN_KEY_CHECKS = @OLD_FOREIGN_KEY_CHECKS;
 
 -- ============================================================
