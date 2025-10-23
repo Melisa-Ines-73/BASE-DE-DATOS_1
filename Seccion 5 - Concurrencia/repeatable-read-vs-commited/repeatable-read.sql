@@ -2,6 +2,7 @@ USE Biblioteca;
 
 -- repeatable read --> Las lecturas con SELECT recuperan siempre los mismos valores dentro de una misma transacción
 -- 					   Los cambios dentro de otras transacciones no se reflejan
+-- SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED;  
 SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ;  
 START TRANSACTION;
 
